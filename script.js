@@ -210,6 +210,126 @@ const galaxyMaterial = new THREE.ShaderMaterial({
 const galaxy = new THREE.Points(galaxyGeometry, galaxyMaterial);
 scene.add(galaxy);
 
+// Membuat galaksi tambahan dengan variasi posisi, warna, dan struktur acak
+function createAdditionalGalaxy(offsetX, offsetY, offsetZ) {
+  const additionalPositions = new Float32Array(galaxyParameters.count * 3);
+  const additionalColors = new Float32Array(galaxyParameters.count * 3);
+  
+  // Variasi parameter acak untuk tiap galaksi
+  const customParams = {
+    arms: Math.floor(Math.random() * 8) + 2, // 2 hingga 10 lengan
+    spin: galaxyParameters.spin * (Math.random() * 1.5 + 0.5), // 50% sampai 200% dari spin asli
+    randomness: galaxyParameters.randomness * (Math.random() * 1.5 + 0.5), // 50% sampai 200% dari randomness asli
+    randomnessPower: galaxyParameters.randomnessPower * (Math.random() * 1.5 + 0.5), // variasi randomness power
+  };
+  
+  let pointIdx = 0;
+  for (let i = 0; i < galaxyParameters.count; i++) {
+    const radius = Math.pow(Math.random(), customParams.randomnessPower) * galaxyParameters.radius;
+    const branchAngle = (i % customParams.arms) / customParams.arms * Math.PI * 2;
+    const spinAngle = radius * customParams.spin;
+
+    const randomX = (Math.random() - 0.5) * customParams.randomness * radius;
+    const randomY = (Math.random() - 0.5) * customParams.randomness * radius * 1.2; 
+    const randomZ = (Math.random() - 0.5) * customParams.randomness * radius;
+    const totalAngle = branchAngle + spinAngle;
+
+    if (radius < 30 && Math.random() < 0.8) continue;
+
+    const i3 = pointIdx * 3;
+    additionalPositions[i3] = Math.cos(totalAngle) * radius + randomX;
+    additionalPositions[i3 + 1] = randomY;
+    additionalPositions[i3 + 2] = Math.sin(totalAngle) * radius + randomZ;
+
+    const mixedColor = new THREE.Color(0xff66ff);
+    mixedColor.lerp(new THREE.Color(0x66ffff), radius / galaxyParameters.radius);
+    mixedColor.multiplyScalar(0.7 + 0.3 * Math.random());
+    // Ubah warna untuk setiap galaksi tambahan
+    const insideColor = new THREE.Color(
+      Math.random(), 
+      Math.random(), 
+      Math.random()
+    );
+    
+    const outsideColor = new THREE.Color(
+      Math.random(), 
+      Math.random(), 
+      Math.random()
+    );
+    
+    const mixedColorCustom = insideColor.clone();
+    mixedColorCustom.lerp(outsideColor, radius / galaxyParameters.radius);
+    mixedColorCustom.multiplyScalar(0.7 + 0.3 * Math.random());
+    
+    additionalColors[i3] = mixedColorCustom.r;
+    additionalColors[i3 + 1] = mixedColorCustom.g;
+    additionalColors[i3 + 2] = mixedColorCustom.b;
+
+    pointIdx++;
+  }
+
+  const additionalGalaxyGeometry = new THREE.BufferGeometry();
+  additionalGalaxyGeometry.setAttribute('position', new THREE.BufferAttribute(additionalPositions.slice(0, pointIdx * 3), 3));
+  additionalGalaxyGeometry.setAttribute('color', new THREE.BufferAttribute(additionalColors.slice(0, pointIdx * 3), 3));
+
+  const additionalGalaxyMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: { value: 0.0 },
+      uSize: { value: 50.0 * renderer.getPixelRatio() },
+      uRippleTime: { value: -1.0 },
+      uRippleSpeed: { value: 40.0 },
+      uRippleWidth: { value: 20.0 }
+    },
+    vertexShader: galaxyMaterial.vertexShader,
+    fragmentShader: galaxyMaterial.fragmentShader,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    transparent: true,
+    vertexColors: true
+  });
+  
+  const additionalGalaxy = new THREE.Points(additionalGalaxyGeometry, additionalGalaxyMaterial);
+  additionalGalaxy.position.set(offsetX, offsetY, offsetZ);
+  
+  // Skala acak untuk galaksi (0.5 hingga 1.5 dari ukuran normal)
+  const scaleRandom = Math.random() * 1.0 + 0.5;
+  additionalGalaxy.scale.set(scaleRandom, scaleRandom, scaleRandom);
+  
+  scene.add(additionalGalaxy);
+  
+  // Tambahkan animasi rotasi lambat dengan kecepatan acak
+  const rotationSpeed = {
+    x: (Math.random() - 0.5) * 0.0005,
+    y: (Math.random() - 0.5) * 0.0005,
+    z: (Math.random() - 0.5) * 0.0005
+  };
+  
+  additionalGalaxy.userData.rotationSpeed = rotationSpeed;
+  
+  return {
+    galaxy: additionalGalaxy,
+    material: additionalGalaxyMaterial
+  };
+}
+
+// Buat 3 galaksi tambahan dengan posisi dan rotasi acak
+const additionalGalaxies = [];
+for (let i = 0; i < 3; i++) {
+  const offsetX = (Math.random() - 0.5) * 800;
+  const offsetY = (Math.random() - 0.5) * 800;
+  const offsetZ = (Math.random() - 0.5) * 800;
+  
+  const galaxyInfo = createAdditionalGalaxy(offsetX, offsetY, offsetZ);
+  
+  // Tambahkan rotasi acak pada setiap sumbu
+  const rotationX = Math.random() * Math.PI * 2; // 0 hingga 360 derajat
+  const rotationY = Math.random() * Math.PI * 2;
+  const rotationZ = Math.random() * Math.PI * 2;
+  
+  galaxyInfo.galaxy.rotation.set(rotationX, rotationY, rotationZ);
+  additionalGalaxies.push(galaxyInfo);
+}
+
 function createNeonTexture(image, size) {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = size;
@@ -930,6 +1050,15 @@ function animate() {
 
   controls.update();
   planet.material.uniforms.time.value = time * 0.5;
+  
+  // Animasi rotasi untuk galaksi tambahan
+  additionalGalaxies.forEach(({ galaxy }) => {
+    if (galaxy.userData.rotationSpeed) {
+      galaxy.rotation.x += galaxy.userData.rotationSpeed.x;
+      galaxy.rotation.y += galaxy.userData.rotationSpeed.y;
+      galaxy.rotation.z += galaxy.userData.rotationSpeed.z;
+    }
+  });
 
   if (fadeInProgress && fadeOpacity < 1) {
     fadeOpacity += 0.025;
